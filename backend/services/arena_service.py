@@ -42,7 +42,10 @@ class ArenaClient:
                 logger.info(f"Arena Login Successful. Workspace: {data.get('workspaceName')}")
                 return True
             else:
-                logger.error(f"Arena login failed: {response.status_code} - {response.text}")
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get("note") or error_data.get("reason") or response.text
+                logger.error(f"Arena login failed: {response.status_code} - {error_msg}")
+                self.last_error = f"Arena Login Error ({response.status_code}): {error_msg}"
                 return False
         except Exception as e:
             logger.error(f"Arena login exception: {str(e)}")

@@ -26,5 +26,8 @@ export const testArenaItem = async (guid) => {
     const response = await api.get(`/test/arena/item/${guid}`);
     return response.data;
 };
-
+export const syncOnDemand = async (itemNumber, dryRun = true) => {
+    const response = await api.post(`/sync/on-demand?item_number=${itemNumber}&dry_run=${dryRun}`);
+    return response.data;
+};
 export default api;
