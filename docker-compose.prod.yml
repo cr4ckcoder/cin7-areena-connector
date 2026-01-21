@@ -6,9 +6,11 @@ services:
       context: ./backend
     container_name: cin7-backend
     restart: always
+    # Override the default command to listen on port 8001 instead of 8000
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8001
     environment:
-      # Database file will be stored in the persistent volume mounted at /data
-      - DATABASE_URL=sqlite:///data/connector.db
+      # Use 4 slashes for absolute path in Linux: sqlite:////absolute/path
+      - DATABASE_URL=sqlite:////data/connector.db
       - PYTHONUNBUFFERED=1
     volumes:
       - backend_data:/data
@@ -21,7 +23,8 @@ services:
       - "traefik.http.routers.cin7-backend.entrypoints=websecure"
       - "traefik.http.routers.cin7-backend.tls=true"
       - "traefik.http.routers.cin7-backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.cin7-backend.loadbalancer.server.port=8000"
+      # Update Traefik to look for port 8001
+      - "traefik.http.services.cin7-backend.loadbalancer.server.port=8001"
 
   frontend:
     build:
