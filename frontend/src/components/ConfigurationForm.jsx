@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, saveSettings, triggerSync } from '../api';
+import { getSettings, saveSettings } from '../api';
 
 const ConfigurationForm = () => {
   const [settings, setSettings] = useState({
     arena_workspace_id: '',
     arena_email: '',
     arena_password: '',
+    item_prefix_filter: '',
     cin7_api_user: '',
     cin7_api_key: '',
     auto_sync_enabled: false
   });
   const [loading, setLoading] = useState(false);
-  const [syncLoading, setSyncLoading] = useState(false);
   const [message, setMessage] = useState(null);
-  const [syncResult, setSyncResult] = useState(null);
 
   useEffect(() => {
     fetchSettings();
@@ -51,19 +50,6 @@ const ConfigurationForm = () => {
     }
   };
 
-  const handleSync = async () => {
-    setSyncLoading(true);
-    setSyncResult(null);
-    try {
-      const result = await triggerSync();
-      setSyncResult(result);
-    } catch (err) {
-        setSyncResult({ status: 'error', message: 'Sync failed to start', errors: [err.message] });
-    } finally {
-      setSyncLoading(false);
-    }
-  };
-
   return (
     <div>
       <div className="card">
@@ -90,6 +76,11 @@ const ConfigurationForm = () => {
               <div className="form-group">
                 <label>Password</label>
                 <input type="password" name="arena_password" value={settings.arena_password} onChange={handleChange} placeholder="••••••••" />
+              </div>
+              <div className="form-group">
+                <label>Item Prefix Filter</label>
+                <input type="text" name="item_prefix_filter" value={settings.item_prefix_filter || ''} onChange={handleChange} placeholder="e.g. 100- (Leave empty for all)" />
+                <p style={{fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.25rem'}}>Only sync items starting with this prefix.</p>
               </div>
             </div>
 
@@ -123,49 +114,6 @@ const ConfigurationForm = () => {
              </button>
           </div>
         </form>
-      </div>
-
-      <div className="card">
-        <div className="card-title">
-            <span>Manual Operations</span>
-            {syncResult && (
-                <span className={`status-badge ${syncResult.status === 'success' ? 'success' : 'error'}`}>
-                    {syncResult.status === 'success' ? 'Sync Completed' : 'Sync Failed'}
-                </span>
-            )}
-        </div>
-        
-        <div style={{display: 'flex', alignItems: 'flex-start', gap: '2rem'}}>
-            <div style={{flex: 1}}>
-                <p style={{marginTop: 0, color: 'var(--text-secondary)', marginBottom: '1.5rem'}}>
-                    Triggering a manual sync will immediately check for "Completed" changes in Arena PLM and push them to Cin7.
-                </p>
-                <button onClick={handleSync} className="btn btn-primary" disabled={syncLoading} style={{width: '100%'}}>
-                    {syncLoading ? 'Syncing...' : 'Trigger Sync Now'}
-                </button>
-            </div>
-            
-            <div style={{flex: 2}}>
-                <label>Activity Log</label>
-                <div className="log-container">
-                    {!syncResult && !syncLoading && <div className="log-item" style={{color: '#64748B'}}>No recent activity.</div>}
-                    {syncLoading && <div className="log-item">Starting sync process...</div>}
-                    {syncResult && (
-                        <>
-                            <div className="log-item success">Result: {syncResult.message}</div>
-                            <div className="log-item">Processed Items: {syncResult.processed_items}</div>
-                            {syncResult.errors && syncResult.errors.length > 0 ? (
-                                syncResult.errors.map((err, idx) => (
-                                    <div key={idx} className="log-item error">Error: {err}</div>
-                                ))
-                            ) : (
-                                <div className="log-item success">No errors encountered.</div>
-                            )}
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
       </div>
     </div>
   );

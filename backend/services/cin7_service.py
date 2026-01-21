@@ -43,7 +43,10 @@ class Cin7Client:
 
         url = f"{self.base_url}/Product"
         try:
-            response = requests.post(url, headers=self.headers, json=product_data, timeout=15)
+            if existing:
+                response = requests.put(url, headers=self.headers, json=product_data, timeout=15)
+            else:
+                response = requests.post(url, headers=self.headers, json=product_data, timeout=15)
             
             if response.status_code in [200, 201, 202]:
                 return {"status": "success", "data": response.json()}
@@ -63,4 +66,43 @@ class Cin7Client:
                 }
         except Exception as e:
             logger.error(f"Cin7 Exception for {sku}: {e}")
-            return {"status": "error", "message": f"Connection Exception: {str(e)}"}
+    def upload_bill_of_materials(self, product_id, bom_products):
+        """Uploads BOM for a product. Deletes existing BOM if necessary implicitly by overwriting or explicit call not shown."""
+        url = f"{self.base_url}/BillOfMaterials"
+        
+        # Construct payload for BOM endpoint
+        payload = {
+            "ProductID": product_id,
+            "OrderType": "Assembly", # Standard for manufacturing
+            "Products": bom_products # The list of components
+        }
+
+        try:
+            # Check if BOM exists? Or just POST to create/update.
+            # PUT might be safer if it exists, or POST if new.
+            # Dear API often treats BOM modification via POST to the same endpoint or specific update logic.
+            # Let's try PUT first as it's idempotent for "Setting" the BOM.
+            # If PUT fails with 404, we might retry POST? Or assume POST is for creation.
+            # Actually, standard Dear API documentation often says "POST /BillOfMaterials" to create/update.
+            
+            response = requests.post(url, headers=self.headers, json=payload, timeout=15)
+            
+            if response.status_code in [200, 201]:
+                return {"status": "success", "data": response.json()}
+            else:
+                 # Parse error
+                try:
+                    error_data = response.json()
+                    if isinstance(error_data, list):
+                        error_msg = "; ".join([f"{e.get('Exception') or e.get('Message', 'Unknown Error')}" for e in error_data])
+                    else:
+                        error_msg = error_data.get("Exception") or error_data.get("Message") or str(error_data)
+                except:
+                    error_msg = response.text
+                
+                logger.error(f"Failed to upload BOM for {product_id}: {error_msg}")
+                return {"status": "error", "message": error_msg}
+
+        except Exception as e:
+            logger.error(f"Exception uploading BOM for {product_id}: {e}")
+            return {"status": "error", "message": str(e)}

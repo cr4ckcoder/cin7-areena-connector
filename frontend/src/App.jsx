@@ -1,16 +1,24 @@
 import React from 'react';
-import ConfigurationForm from './components/ConfigurationForm';
-import TestingTools from './components/TestingTools';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
-import OnDemandSync from './components/OnDemandSync';
+import Dashboard from './pages/Dashboard';
+import Configuration from './pages/Configuration';
+import Tools from './pages/Tools';
+import Logs from './pages/Logs';
 
 function App() {
   return (
-    <Layout>
-      <ConfigurationForm />
-      <TestingTools />
-      <OnDemandSync />
-    </Layout>
+    <Router>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/settings" element={<Configuration />} />
+          <Route path="/tools" element={<Tools />} />
+          <Route path="/logs" element={<Logs />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
+    </Router>
   );
 }
 

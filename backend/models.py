@@ -14,6 +14,7 @@ class Configuration(Base):
     auto_sync_enabled = Column(Boolean, default=False)
     is_arena_connected = Column(Boolean, default=False)
     is_cin7_connected = Column(Boolean, default=False)
+    item_prefix_filter = Column(String, default="*")
 
 class ArenaItem(Base):
     __tablename__ = "arena_items"
@@ -43,3 +44,12 @@ class ArenaItem(Base):
     parent_item_number = Column(String, nullable=True)
     
     last_updated = Column(DateTime, default=datetime.utcnow)
+
+
+class SyncRule(Base):
+    __tablename__ = "sync_rules"
+    id = Column(Integer, primary_key=True, index=True)
+    rule_key = Column(String, unique=True)  # e.g., "RevenueAccount"
+    rule_name = Column(String)              # e.g., "Default Product Revenue Account"
+    rule_value = Column(String)             # e.g., "4001: OEM Product"
+    is_enabled = Column(Boolean, default=True)

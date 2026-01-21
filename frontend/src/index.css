@@ -1,33 +1,76 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
 
 :root {
   /* Brand Colors */
-  --primary: #4F46E5; /* Indigo 600 */
-  --primary-hover: #4338CA; /* Indigo 700 */
-  --secondary: #64748B; /* Slate 500 */
-  --success: #10B981; /* Emerald 500 */
-  --danger: #EF4444; /* Red 500 */
-  --warning: #F59E0B; /* Amber 500 */
+  --primary: #4f46e5; /* Indigo 600 */
+  --primary-hover: #4338ca; /* Indigo 700 */
+  --secondary: #64748b; /* Slate 500 */
+  --success: #10b981; /* Emerald 500 */
+  --danger: #ef4444; /* Red 500 */
+  --warning: #f59e0b; /* Amber 500 */
 
   /* Neutrals */
-  --bg: #F8FAFC; /* Slate 50 */
-  --card-bg: #FFFFFF;
-  --text-main: #1E293B; /* Slate 800 */
-  --text-secondary: #64748B; /* Slate 500 */
-  --border: #E2E8F0; /* Slate 200 */
-  
+  --bg: #f8fafc; /* Slate 50 */
+  --card-bg: #ffffff;
+  --text-main: #1e293b; /* Slate 800 */
+  --text-secondary: #64748b; /* Slate 500 */
+  --border: #e2e8f0; /* Slate 200 */
+
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
+/* Global Styles */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #213547;
+  background-color: #f8fafc; /* Light slate background */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: var(--bg);
-  color: var(--text-main);
   margin: 0;
   padding: 0;
+  min-height: 100%;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+body {
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background-color: var(--bg);
+  color: var(--text-main);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -69,8 +112,9 @@ body {
   cursor: pointer;
 }
 
-.nav-item:hover, .nav-item.active {
-  background-color: #EEF2FF;
+.nav-item:hover,
+.nav-item.active {
+  background-color: #eef2ff;
   color: var(--primary);
 }
 
@@ -190,40 +234,46 @@ input:focus {
 }
 
 .status-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .status-badge.success {
-    background-color: #DCFCE7;
-    color: #166534;
+  background-color: #dcfce7;
+  color: #166534;
 }
 
 .status-badge.error {
-    background-color: #FEE2E2;
-    color: #991B1B;
+  background-color: #fee2e2;
+  color: #991b1b;
 }
 
 .log-container {
-    background-color: #1E293B;
-    color: #E2E8F0;
-    border-radius: 0.5rem;
-    padding: 1rem;
-    font-family: 'Fira Code', monospace;
-    font-size: 0.75rem;
-    max-height: 200px;
-    overflow-y: auto;
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  font-family: "Fira Code", monospace;
+  font-size: 0.75rem;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .log-item {
-    margin-bottom: 0.25rem;
-    border-bottom: 1px solid #334155;
-    padding-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 0.25rem;
 }
-.log-item:last-child { border-bottom: none; }
-.log-item.error { color: #FCA5A5; }
-.log-item.success { color: #86EFAC; }
+.log-item:last-child {
+  border-bottom: none;
+}
+.log-item.error {
+  color: #fca5a5;
+}
+.log-item.success {
+  color: #86efac;
+}

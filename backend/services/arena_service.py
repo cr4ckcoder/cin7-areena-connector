@@ -51,8 +51,8 @@ class ArenaClient:
             logger.error(f"Arena login exception: {str(e)}")
             return False
 
-    def list_all_items(self):
-        """Fetches all item summaries using pagination."""
+    def list_all_items(self, prefix_filter=None):
+        """Fetches all item summaries using pagination with server-side filtering."""
         if not self.session_id:
             return []
             
@@ -60,8 +60,16 @@ class ArenaClient:
         offset = 0
         limit = 400
         
+        # Prepare search query
+        # Ensure wildcard is applied exactly once, whether user includes it or not
+        if prefix_filter:
+            clean_filter = prefix_filter.rstrip('*')
+            search_param = f"&number={clean_filter}*" 
+        else:
+            search_param = ""
+        
         while True:
-            url = f"{self.base_url}/items?offset={offset}&limit={limit}&number=TEST-*"
+            url = f"{self.base_url}/items?offset={offset}&limit={limit}{search_param}"
             response = requests.get(url, headers=self.headers, timeout=15)
             
             if response.status_code == 200:
@@ -88,3 +96,34 @@ class ArenaClient:
         url = f"{self.base_url}/items/{guid}/sourcing"
         response = requests.get(url, headers=self.headers, timeout=10)
         return response.json() if response.status_code == 200 else {}
+
+    def get_bom(self, guid):
+        """Retrieves the Bill of Materials (BOM) for an item."""
+        url = f"{self.base_url}/items/{guid}/bom"
+        response = requests.get(url, headers=self.headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("results", [])
+        return []
+
+    def get_changes(self):
+        """Fetches recent changes (ECOs/DCOs)."""
+        # Endpoint to list changes. Often /changes
+        # We might want to sort by creationDate desc.
+        # Arena API usually supports params like 'offset', 'limit'.
+        url = f"{self.base_url}/changes?limit=50"
+        response = requests.get(url, headers=self.headers, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("results", [])
+        return []
+
+    def get_change_items(self, change_guid):
+        """Fetches items affected by a specific change."""
+        # Endpoint: /changes/{guid}/items
+        url = f"{self.base_url}/changes/{change_guid}/items"
+        response = requests.get(url, headers=self.headers, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("results", [])
+        return []

@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: cin7-backend
+    restart: always
+    environment:
+      # Database file will be stored in the persistent volume mounted at /data
+      - DATABASE_URL=sqlite:///data/connector.db
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - backend_data:/data
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      # REPLACE 'cin7-api.aproitsolutions.in' with your actual backend domain
+      - "traefik.http.routers.cin7-backend.rule=Host(`cin7-api.aproitsolutions.in`)"
+      - "traefik.http.routers.cin7-backend.entrypoints=websecure"
+      - "traefik.http.routers.cin7-backend.tls=true"
+      - "traefik.http.routers.cin7-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.cin7-backend.loadbalancer.server.port=8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # REPLACE with the FULL URL of your backend (must match the backend Host rule above)
+        VITE_API_URL: "https://cin7-api.aproitsolutions.in"
+    container_name: cin7-frontend
+    restart: always
+    depends_on:
+      - backend
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      # REPLACE 'cin7.aproitsolutions.in' with your actual frontend domain
+      - "traefik.http.routers.cin7-frontend.rule=Host(`cin7.aproitsolutions.in`)"
+      - "traefik.http.routers.cin7-frontend.entrypoints=websecure"
+      - "traefik.http.routers.cin7-frontend.tls=true"
+      - "traefik.http.routers.cin7-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.cin7-frontend.loadbalancer.server.port=80"
+
+volumes:
+  backend_data:
+
+networks:
+  web:
+    external: true
