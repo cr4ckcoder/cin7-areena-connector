@@ -12,6 +12,7 @@ venv/
 *.db
 .pytest_cache/
 backend/connector.db
+backend/scripts/
 
 # Node / Frontend
 node_modules/
