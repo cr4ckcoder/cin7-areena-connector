@@ -106,13 +106,7 @@ export default function Login() {
           </form>
 
           {/* Default Credentials Info */}
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs text-blue-800 text-center">
-              <strong>Default credentials:</strong> admin / admin
-              <br />
-              <span className="text-blue-600">Please change the password after first login</span>
-            </p>
-          </div>
+          
         </div>
       </div>
     </div>
