@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { triggerSync, getSettings } from '../api';
+import { triggerSync, getStats } from '../api';
 import { Activity, Database, Clock, PlayCircle } from 'lucide-react';
 import SyncResultModal from '../components/SyncResultModal';
 
@@ -14,20 +14,20 @@ const Dashboard = () => {
     const [showModal, setShowModal] = useState(false);
     const [modalTitle, setModalTitle] = useState("");
 
-    // Mock fetching stats for now, or use real data if available
+    // Load stats on mount
     useEffect(() => {
         loadStats();
     }, []);
 
     const loadStats = async () => {
         try {
-           const settings = await getSettings();
-           // In a real app, we'd have a /stats endpoint. 
-           // For now, we infer from settings or local storage if possible, or just show placeholders
+           const data = await getStats();
            setStats({
-               itemsHarvested: '-', // Backend doesn't provide this yet easily without a new endpoint
-               lastSync:  settings.last_sync_time ? new Date(settings.last_sync_time).toLocaleString() : 'Never',
-               autoSync: settings.auto_sync_enabled
+               itemsHarvested: data.total_synced_items || 0,
+               lastSync: data.last_successful_sync 
+                   ? new Date(data.last_successful_sync).toLocaleString() 
+                   : 'Never',
+               autoSync: data.auto_sync_enabled
            });
         } catch (e) {
             console.error("Failed to load stats", e);

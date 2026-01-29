@@ -26,3 +26,7 @@ yarn-error.log*
 
 # OS
 Thumbs.db
+
+# Encryption Keys (SECURITY - DO NOT COMMIT)
+backend/.encryption_key
+.encryption_key

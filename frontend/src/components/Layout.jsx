@@ -1,10 +1,13 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Settings, Wrench, FileText, Menu, X } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Settings, Wrench, FileText, Menu, X, LogOut, User } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 const Layout = ({ children }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -14,6 +17,11 @@ const Layout = ({ children }) => {
   ];
 
   const handleMobileClick = () => setIsMobileOpen(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 w-full overflow-hidden">
@@ -45,11 +53,18 @@ const Layout = ({ children }) => {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-700">
-          <div className="flex items-center text-xs text-slate-500">
-             <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
-             System Online
+        <div className="p-4 border-t border-slate-700 space-y-3">
+          <div className="flex items-center text-sm text-slate-300 px-3 py-2 bg-slate-800 rounded-lg">
+            <User className="h-4 w-4 mr-2" />
+            <span className="truncate">{user?.username || 'User'}</span>
           </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-red-600 rounded-lg transition-colors"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </button>
         </div>
       </aside>
 
@@ -81,6 +96,19 @@ const Layout = ({ children }) => {
                 </NavLink>
                ))}
              </nav>
+             <div className="p-4 border-t border-slate-700 space-y-3">
+               <div className="flex items-center text-sm text-slate-300 px-3 py-2 bg-slate-800 rounded-lg">
+                 <User className="h-4 w-4 mr-2" />
+                 <span className="truncate">{user?.username || 'User'}</span>
+               </div>
+               <button
+                 onClick={handleLogout}
+                 className="w-full flex items-center px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-red-600 rounded-lg transition-colors"
+               >
+                 <LogOut className="h-4 w-4 mr-2" />
+                 Logout
+               </button>
+             </div>
           </div>
         </div>
       )}

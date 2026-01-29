@@ -6,9 +6,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      # Mount backend directory - this should sync files between host and container
       - ./backend:/app/backend
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=sqlite:////app/backend/connector.db
 
   frontend:
     build: ./frontend

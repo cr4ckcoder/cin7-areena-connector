@@ -3,6 +3,7 @@ from .. import models
 from .arena_service import ArenaClient
 from .cin7_service import Cin7Client
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -173,15 +174,29 @@ def perform_sync(db: Session):
         logger.error(f"Sync failed: {str(e)}")
         return {"status": "error", "message": str(e)}
 
-def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin7_client: Cin7Client):
+def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin7_client: Cin7Client, dry_run: bool = False):
     """
     Ensures a product exists in Cin7. If not, fetches from Arena (including BOM checks) and creates it.
     This is used for recursive BOM component syncing.
+    
+    Args:
+        db: Database session
+        sku: Product SKU to ensure exists
+        arena_client: Arena API client
+        cin7_client: Cin7 API client
+        dry_run: If True, skip actual Cin7 API calls (for testing)
+    
+    Returns:
+        Product ID if successful, None if component should be excluded (Transfer to ERP = No)
     """
-    # 1. Check if exists in Cin7
-    existing = cin7_client.get_product_by_sku(sku)
-    if existing:
-        return existing["ID"]
+    # 1. Check if exists in Cin7 (skip in dry run)
+    if not dry_run:
+        existing = cin7_client.get_product_by_sku(sku)
+        if existing:
+            return existing["ID"]
+    else:
+        # In dry run, assume product doesn't exist to test full flow
+        logger.info(f"[DRY RUN] Skipping Cin7 check for {sku}")
 
     # 2. If not, we need to fetch it from Arena
     # Check if we have it in our local DB first (Harvested)
@@ -189,9 +204,11 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
     
     target_item = None
     bom_items = []
+    transfer_to_erp = None
     
     if db_item:
         target_item = db_item
+        transfer_to_erp = db_item.transfer_to_erp
         # Fetch BOM from Arena using GUID from DB
         try:
             bom_items = arena_client.get_bom(db_item.guid)
@@ -199,7 +216,6 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
             logger.warning(f"Failed to fetch BOM for component {sku}: {e}")
     else:
         # Not in DB, fetch from Arena API
-        # logger.info(f"Component {sku} missing in Cin7 and DB. Fetching from Arena...")
         items = arena_client.list_all_items(sku)
         summary = next((i for i in items if i['number'] == sku), None)
         
@@ -212,6 +228,8 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
         sourcing = arena_client.get_sourcing(guid)
         if details:
             attrs = map_additional_attributes(details)
+            transfer_to_erp = attrs.get("Transfer Data to ERP?")
+            
             results = sourcing.get("results", [])
             mfr_name, mfr_num = None, None
             if results:
@@ -225,7 +243,6 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
                 item_number=details.get("number"),
                 item_name=details.get("name"),
                 revision=details.get("revisionNumber"),
-                # lifecycle_phase=details.get("lifecyclePhase", {}).get("name"), # Might be missing in details if not queried?
                 category=details.get("category", {}).get("name"),
                 description=details.get("description"),
                 uom=details.get("uom"),
@@ -236,7 +253,8 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
                 internal_note_erp=attrs.get("Internal Note for ERP"),
                 last_glg_co=attrs.get("Last GLG CO"),
                 manufacturer=mfr_name,
-                manufacturer_item_number=mfr_num
+                manufacturer_item_number=mfr_num,
+                transfer_to_erp=transfer_to_erp
             )
             # Fetch BOM
             try:
@@ -246,24 +264,51 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
 
     if not target_item:
         return None
+    
+    # BOM Exception Rule: If component has "Transfer to ERP?" = "No", exclude it from BOM
+    if transfer_to_erp and transfer_to_erp != "Yes":
+        logger.warning(f"Component {sku} has 'Transfer to ERP?' = '{transfer_to_erp}' - excluding from BOM")
+        return None
 
     # 3. Recursive Check for this component's components
     if bom_items:
-        # Resolve sub-components first
+        # Resolve sub-components first, filtering out excluded items
         sub_bom_resolved = []
         for line in bom_items:
             comp_sku = line.get("item", {}).get("number")
             qty = line.get("quantity", 0)
             if comp_sku:
-                # Recursion
-                c_id = _ensure_product_exists(db, comp_sku, arena_client, cin7_client)
-                sub_bom_resolved.append({"sku": comp_sku, "qty": qty, "cin7_id": c_id})
+                # Recursion with dry_run flag
+                c_id = _ensure_product_exists(db, comp_sku, arena_client, cin7_client, dry_run)
+                # Only add to BOM if component was successfully resolved (not excluded)
+                # In dry run, c_id will be None, but we still check if it was excluded (function returned None due to filter)
+                # We need to differentiate between "excluded" and "would be created in dry run"
+                # If the function returns None and it's NOT because of dry_run, it means excluded
+                if c_id is not None:
+                    # Component exists or was created
+                    sub_bom_resolved.append({"sku": comp_sku, "qty": qty, "cin7_id": c_id})
+                elif dry_run:
+                    # In dry run, check if component would be excluded by re-checking the filter
+                    # We can do this by checking the database or Arena for the transfer_to_erp field
+                    db_check = db.query(models.ArenaItem).filter(models.ArenaItem.item_number == comp_sku).first()
+                    if db_check and db_check.transfer_to_erp and db_check.transfer_to_erp != "Yes":
+                        logger.info(f"Skipping excluded component {comp_sku} from BOM of {sku} (Transfer to ERP = {db_check.transfer_to_erp})")
+                    else:
+                        # Would be created in dry run
+                        sub_bom_resolved.append({"sku": comp_sku, "qty": qty, "cin7_id": None})
+                else:
+                    logger.info(f"Skipping excluded component {comp_sku} from BOM of {sku}")
                 
         # 4. Map and Create with BOM info
         payload = map_arena_to_cin7(target_item, db, sub_bom_resolved)
     else:
         payload = map_arena_to_cin7(target_item, db)
 
+    # Skip actual Cin7 API calls in dry run mode
+    if dry_run:
+        logger.info(f"[DRY RUN] Would create product {sku} in Cin7")
+        return None  # Return None in dry run since no real ID is created
+    
     response = cin7_client.create_or_update_product(payload)
     
     if response.get("status") == "success":
@@ -276,11 +321,11 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
             prod_id = data.get("ID")
             
         # If we created it and it had a BOM, we must upload it now
-        if prod_id and bom_items:
+        if prod_id and bom_items and sub_bom_resolved:
              # Logic to upload BOM for component
              # Reuse resolved list
              bom_payload = []
-             for entry in sub_bom_resolved: # defined above if bom_items was true
+             for entry in sub_bom_resolved:
                  line = {"Quantity": entry["qty"]}
                  if entry.get("cin7_id"):
                      line["ComponentProductID"] = entry["cin7_id"]
@@ -295,7 +340,14 @@ def _ensure_product_exists(db: Session, sku: str, arena_client: ArenaClient, cin
     return None
 
 def push_to_cin7(db: Session, dry_run: bool = True):
-    """Bulk pushes filtered items from SQLite to Cin7."""
+    """
+    Bulk pushes filtered items from SQLite to Cin7 using two-phase processing.
+    
+    Phase 1: Process simple items (no BOM) in parallel for performance
+    Phase 2: Process assembly items (with BOM) sequentially with dependency resolution
+    
+    This ensures BOM components are created before parent assemblies.
+    """
     config = db.query(models.Configuration).first()
     cin7 = Cin7Client(config.cin7_api_user, config.cin7_api_key)
     arena = ArenaClient(config.arena_workspace_id, config.arena_email, config.arena_password)
@@ -304,7 +356,6 @@ def push_to_cin7(db: Session, dry_run: bool = True):
     if not arena.login():
         return {"status": "error", "message": "Arena login failed"}
     
-    # Fetch items that match the current dynamic prefix
     # Fetch items that match the current dynamic prefix
     query = db.query(models.ArenaItem)
     if config.item_prefix_filter and config.item_prefix_filter != "*":
@@ -315,69 +366,182 @@ def push_to_cin7(db: Session, dry_run: bool = True):
     
     results = []
     summary = {"success": 0, "failed": 0, "mocked": 0}
-
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    def process_item_payload(item):
-        """Helper to process a single item for parallel execution."""
+    
+    logger.info(f"Starting two-phase sync for {len(items)} items (dry_run={dry_run})")
+    
+    # ========== PHASE 1: Separate items into simple and assembly groups ==========
+    simple_items = []  # Items without BOM
+    assembly_items = []  # Items with BOM
+    
+    logger.info("Phase 1: Categorizing items by BOM presence...")
+    for item in items:
         try:
-            bom_items = []
-            try:
-                bom_items = arena.get_bom(item.guid)
-            except Exception as e:
-                logger.error(f"Failed to fetch BOM for {item.item_number}: {e}")
-            
-            # Resolve Components
-            bom_resolved_list = []
-            for line in bom_items:
-                comp_sku = line.get("item", {}).get("number")
-                qty = line.get("quantity", 0)
-                
-                if comp_sku:
-                    cin7_id = None
-                    if not dry_run:
-                        cin7_id = _ensure_product_exists(db, comp_sku, arena, cin7)
-                    
-                    bom_resolved_list.append({
-                        "sku": comp_sku,
-                        "qty": qty,
-                        "cin7_id": cin7_id
-                    })
-
-            payload = map_arena_to_cin7(item, db, bom_resolved_list)
-            return {"status": "success", "payload": payload, "sku": item.item_number, "mode": "DRY_RUN" if dry_run else "LIVE"}
-            
+            bom_items = arena.get_bom(item.guid)
+            if bom_items and len(bom_items) > 0:
+                assembly_items.append(item)
+                logger.info(f"  Assembly: {item.item_number} (has {len(bom_items)} components)")
+            else:
+                simple_items.append(item)
+                logger.info(f"  Simple: {item.item_number} (no BOM)")
         except Exception as e:
-            return {"status": "error", "message": str(e), "sku": item.item_number}
-
-    # Parallel Execution
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_item = {executor.submit(process_item_payload, item): item for item in items}
+            logger.warning(f"Failed to check BOM for {item.item_number}, treating as simple: {e}")
+            simple_items.append(item)
+    
+    logger.info(f"Categorization complete: {len(simple_items)} simple, {len(assembly_items)} assemblies")
+    
+    # ========== PHASE 2: Process simple items in parallel ==========
+    if simple_items:
+        logger.info(f"Phase 2: Processing {len(simple_items)} simple items in parallel...")
         
-        for future in as_completed(future_to_item):
-            item = future_to_item[future]
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        def process_simple_item(item):
+            """Process a simple item (no BOM) for parallel execution."""
             try:
-                result = future.result()
-                if result["status"] == "success":
-                    if dry_run:
-                        summary["mocked"] += 1
-                        results.append({"SKU": result["sku"], "Mode": result["mode"], "Payload": result["payload"]})
-                    else:
-                        response = cin7.create_or_update_product(result["payload"])
-                        if response.get("status") == "success":
-                            summary["success"] += 1
-                        else:
-                            summary["failed"] += 1
-                            results.append({"SKU": result["sku"], "Error": response.get("message")})
-                else:
-                    summary["failed"] += 1
-                    results.append({"SKU": result["sku"], "Error": result["message"]})
-            except Exception as exc:
-                logger.error(f"Item {item.item_number} generated an exception: {exc}")
-                summary["failed"] += 1
-                results.append({"SKU": item.item_number, "Error": str(exc)})
+                payload = map_arena_to_cin7(item, db, bom_resolved_list=None)
+                return {
+                    "status": "success", 
+                    "payload": payload, 
+                    "sku": item.item_number, 
+                    "mode": "DRY_RUN" if dry_run else "LIVE",
+                    "type": "simple"
+                }
+            except Exception as e:
+                return {"status": "error", "message": str(e), "sku": item.item_number}
+        
+        # Parallel execution for simple items
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_item = {executor.submit(process_simple_item, item): item for item in simple_items}
             
-    return {"status": "complete", "dry_run": dry_run, "summary": summary, "details": results}
+            for future in as_completed(future_to_item):
+                item = future_to_item[future]
+                try:
+                    result = future.result()
+                    if result["status"] == "success":
+                        if dry_run:
+                            summary["mocked"] += 1
+                            results.append({
+                                "SKU": result["sku"], 
+                                "Mode": result["mode"], 
+                                "Type": "Simple",
+                                "Payload": result["payload"]
+                            })
+                        else:
+                            response = cin7.create_or_update_product(result["payload"])
+                            if response.get("status") == "success":
+                                summary["success"] += 1
+                                logger.info(f"✓ Created simple item: {result['sku']}")
+                            else:
+                                summary["failed"] += 1
+                                results.append({
+                                    "SKU": result["sku"], 
+                                    "Type": "Simple",
+                                    "Error": response.get("message")
+                                })
+                                logger.error(f"✗ Failed simple item: {result['sku']} - {response.get('message')}")
+                    else:
+                        summary["failed"] += 1
+                        results.append({"SKU": result["sku"], "Type": "Simple", "Error": result["message"]})
+                        logger.error(f"✗ Error processing simple item: {result['sku']} - {result['message']}")
+                except Exception as exc:
+                    logger.error(f"Item {item.item_number} generated an exception: {exc}")
+                    summary["failed"] += 1
+                    results.append({"SKU": item.item_number, "Type": "Simple", "Error": str(exc)})
+    
+    # ========== PHASE 3: Process assembly items sequentially ==========
+    if assembly_items:
+        logger.info(f"Phase 3: Processing {len(assembly_items)} assembly items sequentially...")
+        
+        for item in assembly_items:
+            try:
+                logger.info(f"Processing assembly: {item.item_number}")
+                
+                # Fetch BOM
+                bom_items = []
+                try:
+                    bom_items = arena.get_bom(item.guid)
+                    logger.info(f"  Found {len(bom_items)} BOM components")
+                except Exception as e:
+                    logger.error(f"Failed to fetch BOM for {item.item_number}: {e}")
+                
+                # Resolve Components using _ensure_product_exists
+                # This recursively creates missing components and filters excluded ones
+                bom_resolved_list = []
+                for line in bom_items:
+                    comp_sku = line.get("item", {}).get("number")
+                    qty = line.get("quantity", 0)
+                    
+                    if comp_sku:
+                        logger.info(f"  Ensuring component exists: {comp_sku}")
+                        cin7_id = _ensure_product_exists(db, comp_sku, arena, cin7, dry_run)
+                        
+                        # Only add to BOM if component was successfully resolved (not excluded)
+                        if cin7_id is not None:
+                            # Component exists or was created
+                            bom_resolved_list.append({
+                                "sku": comp_sku,
+                                "qty": qty,
+                                "cin7_id": cin7_id
+                            })
+                            logger.info(f"    ✓ Component {comp_sku} ensured (ID: {cin7_id})")
+                        elif dry_run:
+                            # In dry run, check if component would be excluded
+                            db_check = db.query(models.ArenaItem).filter(models.ArenaItem.item_number == comp_sku).first()
+                            if db_check and db_check.transfer_to_erp and db_check.transfer_to_erp != "Yes":
+                                logger.info(f"    ⊘ Component {comp_sku} excluded (Transfer to ERP = {db_check.transfer_to_erp})")
+                            else:
+                                # Would be created in dry run
+                                bom_resolved_list.append({
+                                    "sku": comp_sku,
+                                    "qty": qty,
+                                    "cin7_id": None
+                                })
+                                logger.info(f"    [DRY RUN] Component {comp_sku} would be ensured")
+                        else:
+                            logger.info(f"    ⊘ Component {comp_sku} excluded (Transfer to ERP = No)")
+                
+                # Build payload with resolved BOM
+                payload = map_arena_to_cin7(item, db, bom_resolved_list)
+                
+                if dry_run:
+                    summary["mocked"] += 1
+                    results.append({
+                        "SKU": item.item_number, 
+                        "Mode": "DRY_RUN",
+                        "Type": "Assembly",
+                        "Payload": payload
+                    })
+                    logger.info(f"[DRY RUN] Assembly {item.item_number} payload prepared")
+                else:
+                    # Create/update the assembly in Cin7
+                    response = cin7.create_or_update_product(payload)
+                    if response.get("status") == "success":
+                        summary["success"] += 1
+                        logger.info(f"✓ Created assembly: {item.item_number}")
+                    else:
+                        summary["failed"] += 1
+                        results.append({
+                            "SKU": item.item_number,
+                            "Type": "Assembly", 
+                            "Error": response.get("message")
+                        })
+                        logger.error(f"✗ Failed assembly: {item.item_number} - {response.get('message')}")
+                        
+            except Exception as e:
+                logger.error(f"Exception processing assembly {item.item_number}: {e}")
+                summary["failed"] += 1
+                results.append({"SKU": item.item_number, "Type": "Assembly", "Error": str(e)})
+    
+    # Update sync statistics (only for live syncs, not dry runs)
+    if not dry_run and summary["success"] > 0:
+        config.total_synced_items = (config.total_synced_items or 0) + summary["success"]
+        config.last_successful_sync = datetime.utcnow()
+        config.last_sync_time = datetime.utcnow()
+        db.commit()
+        logger.info(f"Updated sync stats: total={config.total_synced_items}, last_sync={config.last_successful_sync}")
+    
+    logger.info(f"Sync complete: {summary}")
+    return {"status": "complete", "dry_run": dry_run, "push_summary": summary, "details": results}
 
 def sync_single_item(db: Session, item_number: str, dry_run: bool = True):
     """On-demand sync for a specific SKU."""
@@ -437,9 +601,8 @@ def sync_single_item(db: Session, item_number: str, dry_run: bool = True):
         qty = line.get("quantity", 0)
         
         if comp_sku:
-            cin7_id = None
-            if not dry_run:
-                cin7_id = _ensure_product_exists(db, comp_sku, arena, cin7)
+            # Always ensure product exists, passing dry_run flag
+            cin7_id = _ensure_product_exists(db, comp_sku, arena, cin7, dry_run)
             
             bom_resolved_list.append({
                 "sku": comp_sku,

@@ -2,6 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from . import models, schemas, database
 from .services import sync_service
+from .auth import router as auth_router
+from .init_admin import init_default_admin
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 import logging
@@ -25,7 +27,12 @@ logger.setLevel(logging.INFO)
 logger.addHandler(c_handler)
 logger.addHandler(f_handler)
 
-models.Base.metadata.create_all(bind=database.engine)
+# Initialize database and run auto-migration
+database.init_db()
+
+# Initialize default admin user
+init_default_admin()
+
 app = FastAPI()
 
 @app.get("/admin/logs")
@@ -82,6 +89,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include authentication router
+app.include_router(auth_router)
+
 
 def get_db():
     db = database.SessionLocal()
@@ -126,6 +136,26 @@ def save_settings(settings: schemas.ConfigurationCreate, db: Session = Depends(g
     db.commit()
     db.refresh(config)
     return config
+
+
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Get dashboard statistics."""
+    config = db.query(models.Configuration).first()
+    if not config:
+        return {
+            "total_synced_items": 0,
+            "last_successful_sync": None,
+            "last_sync_time": None,
+            "auto_sync_enabled": False
+        }
+    
+    return {
+        "total_synced_items": config.total_synced_items or 0,
+        "last_successful_sync": config.last_successful_sync,
+        "last_sync_time": config.last_sync_time,
+        "auto_sync_enabled": config.auto_sync_enabled
+    }
 
 
 @app.get("/test/arena/item/{guid}")

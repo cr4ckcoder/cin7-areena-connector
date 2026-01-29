@@ -43,13 +43,18 @@ const SyncResultModal = ({ result, onClose, title }) => {
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-center">
                     <div className="text-sm text-slate-500 mb-1">Items Processed</div>
                     <div className="text-2xl font-bold text-slate-800">
-                        {result.summary?.mocked || result.summary?.success || result.items_harvested || 0}
+                        {/* Support both old and new API response formats */}
+                        {result.harvest_summary?.items_harvested || 
+                         result.push_summary?.mocked || 
+                         ((result.push_summary?.success || 0) + (result.push_summary?.failed || 0)) ||
+                         ((result.summary?.success || 0) + (result.summary?.failed || 0) + (result.summary?.mocked || 0)) ||
+                         0}
                     </div>
                 </div>
                 <div className="bg-red-50 p-4 rounded-lg border border-red-100 text-center">
                     <div className="text-sm text-red-600 mb-1">Failures</div>
                     <div className="text-2xl font-bold text-red-700">
-                        {result.summary?.failed || (result.errors ? result.errors.length : 0)}
+                        {result.push_summary?.failed || result.summary?.failed || 0}
                     </div>
                 </div>
                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-center">
