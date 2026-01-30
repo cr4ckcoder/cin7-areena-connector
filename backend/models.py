@@ -53,3 +53,9 @@ class SyncRule(Base):
     rule_name = Column(String)              # e.g., "Default Product Revenue Account"
     rule_value = Column(String)             # e.g., "4001: OEM Product"
     is_enabled = Column(Boolean, default=True)
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)

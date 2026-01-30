@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import ConfigurationForm from '../components/ConfigurationForm';
 import SyncRulesManager from '../components/SyncRulesManager';
-import { Settings, ShieldCheck } from 'lucide-react';
+import ChangePasswordForm from '../components/ChangePasswordForm';
+import { Settings, ShieldCheck, Lock } from 'lucide-react';
 
 const Configuration = () => {
   const [activeTab, setActiveTab] = useState('connections');
@@ -39,6 +40,17 @@ const Configuration = () => {
               <ShieldCheck className="w-4 h-4 mr-2" />
               Sync Rules
             </button>
+             <button
+               onClick={() => setActiveTab('security')}
+               className={`flex items-center px-6 py-4 font-medium text-sm transition-colors whitespace-nowrap ${
+                 activeTab === 'security' 
+                 ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/50' 
+                 : 'text-slate-600 hover:bg-slate-50'
+               }`}
+            >
+              <Lock className="w-4 h-4 mr-2" />
+              Security
+            </button>
          </div>
          
          <div className="p-6">
@@ -51,6 +63,12 @@ const Configuration = () => {
             {activeTab === 'rules' && (
                <div>
                   <SyncRulesManager />
+               </div>
+            )}
+
+            {activeTab === 'security' && (
+               <div className="max-w-4xl">
+                  <ChangePasswordForm />
                </div>
             )}
          </div>

@@ -7,6 +7,62 @@ const api = axios.create({
   },
 });
 
+// Request interceptor to add the auth token header to requests
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor to handle 401 errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            // Don't redirect if it's the login request itself failing
+            if (!error.config.url.includes('/token')) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
+export const login = async (username, password) => {
+    // Uses form-data format as expected by OAuth2PasswordRequestForm
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
+    
+    // Don't set Content-Type manually, axios handles it for FormData
+    const response = await axios.post(`${api.defaults.baseURL}/token`, formData);
+    if (response.data.access_token) {
+        localStorage.setItem("token", response.data.access_token);
+    }
+    return response.data;
+};
+
+export const logout = () => {
+    localStorage.removeItem("token");
+    window.location.href = '/login';
+};
+
+export const changePassword = async (currentPassword, newPassword) => {
+    const response = await api.post('/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword
+    });
+    return response.data;
+};
+
 export const getSettings = async () => {
   const response = await api.get("/settings");
   return response.data;

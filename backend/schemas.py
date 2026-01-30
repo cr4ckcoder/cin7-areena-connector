@@ -50,3 +50,20 @@ class SyncResult(BaseModel):
     message: str
     processed_items: int = 0
     errors: list[str] = []
+
+# Auth Schemas
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+class User(BaseModel):
+    email: str
+    class Config:
+        from_attributes = True
+
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
