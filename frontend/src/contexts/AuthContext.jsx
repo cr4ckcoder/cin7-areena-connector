@@ -58,6 +58,21 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const changePassword = async (oldPassword, newPassword) => {
+    const response = await axios.post(
+      `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/auth/change-password`,
+      {
+        old_password: oldPassword,
+        new_password: newPassword,
+      },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    return response.data;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -65,6 +80,7 @@ export const AuthProvider = ({ children }) => {
         token,
         login,
         logout,
+        changePassword,
         loading,
         isAuthenticated: !!token,
       }}

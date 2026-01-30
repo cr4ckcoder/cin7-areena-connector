@@ -138,9 +138,18 @@ async def change_password(
     Raises:
         HTTPException: If old password is incorrect
     """
+    # Get user from current session (current_user is detached from a different session)
+    user = db.query(models.User).filter(models.User.username == current_user.username).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
     # Verify old password
-    if not verify_password(request.old_password, current_user.hashed_password):
-        logger.warning(f"Failed password change attempt for user: {current_user.username}")
+    if not verify_password(request.old_password, user.hashed_password):
+        logger.warning(f"Failed password change attempt for user: {user.username}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect old password"
@@ -154,10 +163,12 @@ async def change_password(
         )
     
     # Update password
-    current_user.hashed_password = hash_password(request.new_password)
-    db.commit()
+    user.hashed_password = hash_password(request.new_password)
+    db.flush()  # Flush changes to database
+    db.commit()  # Commit transaction
+    db.refresh(user)  # Refresh to ensure we have the latest state
     
-    logger.info(f"Password changed successfully for user: {current_user.username}")
+    logger.info(f"Password changed successfully for user: {user.username}")
     
     return {"message": "Password changed successfully"}
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Settings, Wrench, FileText, Menu, X, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Settings, Wrench, FileText, Menu, X, LogOut, User, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,6 +12,7 @@ const Layout = ({ children }) => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Configuration', href: '/settings', icon: Settings },
+    { name: 'Account Settings', href: '/account-settings', icon: KeyRound },
     { name: 'Tools', href: '/tools', icon: Wrench },
     { name: 'Logs', href: '/logs', icon: FileText },
   ];
